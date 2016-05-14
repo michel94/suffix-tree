@@ -1,3 +1,4 @@
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,29 +6,37 @@
 #define false 0
 #define true 1
 
-#define SIZE 100
-#define MAX_LEN 1000
-#define MAX_STRINGS 100
-#define SET_SIZE (MAX_STRINGS+64) / 64
-#define TERM 'Z' + 1
+#define SIZE 1000
+int TERM = 'Z' + 1;
+int TOTAL_SIZE=0;
 
 #define DEBUG 0
 
-char* Ti;
-int Tsize;
+int SET_SIZE;
+
+int* Ti;
+int Tsize=0;
 int Tid;
-char *strings[MAX_STRINGS];
+int Ti_len;
 
 int d;
 
 typedef struct node_t node_t;
+typedef struct list_t list_t;
+
+struct list_t{
+  node_t* pointer;
+  list_t* next;
+  int index;
+};
 
 struct node_t{
   int head;
   int sdep;
-  node_t** children;
   node_t* slink;
+  list_t* list;
 };
+
 
 typedef struct point_t point_t;
 
@@ -41,8 +50,8 @@ typedef long long int lld;
 typedef struct set_t set_t;
 
 struct set_t{
-  lld value[SET_SIZE];
-  char count;
+  lld* value;
+  int count;
 };
 
 int updateLink = 0;
@@ -51,27 +60,54 @@ node_t* n_slink = NULL;
 node_t* root;
 node_t* fake;
 
+list_t* new_list(){
+  list_t* l = malloc(sizeof(list_t));
+  l->pointer = NULL;
+  l->next = NULL;
+  l->index = -1;
+  return l;
+}
+
 node_t* new_node(){
   node_t* node = (node_t*) malloc(sizeof(node_t));
-  node->children = (node_t**) malloc(sizeof(node_t*) * SIZE);
-  memset(node->children, 0, sizeof(node_t*) * SIZE);
+  /*node->children = (node_t**) malloc(sizeof(node_t*) * SIZE);
+  memset(node->children, 0, sizeof(node_t*) * SIZE);*/
   node->head = 0;
+  node->list = new_list();
   return node;
 }
 
-void point(point_t* p, node_t* a, node_t* b, int sdep){
-  p->a = a;
-  p->b = b;
-  p->depth = sdep;
+node_t* get(node_t* node, int c){
+  list_t* el = node->list;
+  while(el->next != NULL){
+    if(el->next->index == c){
+      return el->next->pointer;
+    }
+    el = el->next;
+  }
+  return NULL;
+}
+
+void set(node_t* node, int c, node_t* p){
+  list_t* el = node->list;
+  while(el->next != NULL){
+    if(el->next->index == c){
+      el->next->pointer = p;
+      return;
+    }
+    el = el->next;
+  }
+  el->next = new_list();
+  el->next->pointer = p;
+  el->next->index = c;
 }
 
 int descendQ(point_t* p, int c){
-  if(DEBUG) printf("descendQ with %c, on %s\n", c, p->a == root ? "root" : "not root");
-  c -= 'A';
+  if(DEBUG) printf("Try to descend by %c\n", c);
 
   if(p->b == p->a){
-    if(DEBUG) printf("b=a\n");
-    p->b = p->a->children[c];
+    /*p->b = p->a->children[c];*/
+    p->b = get(p->a, c);
   }
 
   if(p->b == NULL){
@@ -83,7 +119,7 @@ int descendQ(point_t* p, int c){
     return true;
   }else if(p->depth > 0){
     int pos = p->b->head + p->depth;
-    if(c == Ti[pos] - 'A'){
+    if(c == Ti[pos]){
       if(DEBUG) printf("Can Descend\n");
       return true;
     }
@@ -96,11 +132,9 @@ int descendQ(point_t* p, int c){
 
 }
 
-void descend(point_t* p, char c){
-  if(DEBUG) printf("Descending with %c; head: %d, depth: %d, sdep: %d\n", c, p->b->head, p->depth, p->b->sdep);
+void descend(point_t* p, int c){
   p->depth++;
   if(p->depth >= p->b->sdep){
-    if(DEBUG) printf("Descend to next node\n");
     p->a = p->b;
     p->depth = 0;
   }
@@ -114,7 +148,8 @@ void add_leaf(point_t* p, int j){
     node_t* leaf = new_node();
     leaf->head = j;
     leaf->sdep = Tsize - j + 1;
-    p->a->children[Ti[j]-'A'] = leaf;
+    /*p->a->children[Ti[j]] = leaf;*/
+    set(p->a, Ti[j], leaf);
     p->b = leaf;
   }else if(p->depth <= p->b->sdep){
     node_t* old_leaf = p->b;
@@ -134,37 +169,47 @@ void add_leaf(point_t* p, int j){
     new_leaf->sdep = Tsize - j + 1;
     if(DEBUG) printf("size: %d, sdep: %d\n", Tsize, new_leaf->sdep);
 
-    internal->children[Ti[old_leaf->head]-'A'] = old_leaf;
-    internal->children[Ti[new_leaf->head]-'A'] = new_leaf;
-    p->a->children[Ti[head]-'A'] = internal;
+    /*internal->children[Ti[old_leaf->head]] = old_leaf;*/
+    set(internal, Ti[old_leaf->head], old_leaf);
+    /*internal->children[Ti[new_leaf->head]] = new_leaf;*/
+    set(internal, Ti[new_leaf->head], new_leaf);
+    /*p->a->children[Ti[head]] = internal;*/
+    set(p->a, Ti[head], internal);
     p->b = internal;
     
     internal->slink = root;
     
     if(updateLink){
       updateLink = 0;
-      if(DEBUG) printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> POINTING SLINK OF HEAD %d TO HEAD %d\n", n_slink->head, internal->head );
       n_slink->slink = internal;
     }
 
     n_slink = internal;
     updateLink = 1;
   }else{
-    if(DEBUG) printf("WTF!!!\n");
+    ;
   }
 
 }
 
 int what_char(point_t* p){
+  list_t* el = p->a->list;
+  while(el->next != NULL){
+    if(el->next->pointer == p->b){
+      return el->next->index;
+    }
+    el = el->next;
+  }
+  return -1;
+/*
   int i;
   for(i=0; i<SIZE; i++)
     if(p->a->children[i] == p->b)
       return i;
-  return -1;
+  return -1;*/
 }
 
 void print_tree(node_t* root);
-void print_node(node_t* root);
 
 void suffix_jump(point_t* p, int j){
   int c = what_char(p);
@@ -173,7 +218,10 @@ void suffix_jump(point_t* p, int j){
     int depth = p->depth;
 
     p->a = p->a->slink;
-    p->b = p->a->children[c];
+    /*p->b = p->a->children[c];*/
+    /*printf("slink of a is %s\n", p->a == fake ? "fake node": "other");*/
+    /*printf("On suffix_jump, descending by %c\n", c);*/
+    p->b = get(p->a, c);
 
     p->depth = 0;
     
@@ -188,7 +236,8 @@ void suffix_jump(point_t* p, int j){
         head += p->b->sdep;
         if(DEBUG) printf("SJ: head is %d\n", head);
         p->a = p->b;
-        p->b = p->a->children[Ti[head] - 'A'];
+        /*p->b = p->a->children[Ti[head]];*/
+        p->b = get(p->a, Ti[head]);
       }
     }
     if(updateLink && p->depth == 0){
@@ -207,7 +256,7 @@ void suffix_jump(point_t* p, int j){
 }
 
 int TAB = 0;
-
+/*
 void print_node(node_t* root){
   if(root == NULL)
     return;
@@ -227,8 +276,9 @@ void print_node(node_t* root){
     TAB--;
   }
 }
+*/
 
-void print_tree(node_t* root){
+/*void print_tree(node_t* root){
   int i;
   for(i=0; i<SIZE; i++){
     if(root->children[i] != NULL){
@@ -244,9 +294,9 @@ void print_tree(node_t* root){
       TAB--;
     }
   }
-}
+}*/
 
-int best[MAX_STRINGS];
+int* best;
 
 void updateBest(int value, int sdep){
   int i;
@@ -260,15 +310,16 @@ void updateBest(int value, int sdep){
 
 set_t* new_set(){
   set_t* set = (set_t*) malloc(sizeof(set_t));
-  memset(set->value, 0, SET_SIZE * sizeof(lld) );
+  set->value = malloc( (SET_SIZE*2) * sizeof(int) );
+  memset(set->value, 0, (SET_SIZE*2) * sizeof(int) );
   set->count = 0;
 
   return set;
 }
 
 void insert(set_t* set, int pos){
-  int i = pos / 64;
-  int j = pos % 64;
+  int i = pos / 32;
+  int j = pos % 32;
   set->value[i] |= 1 << j;
 }
 
@@ -300,13 +351,13 @@ set_t* dfs(node_t* root, int sdep){
   }
   
   TAB++;
-  int i;
-  for(i=0; i<SIZE; i++){
-    if(root->children[i] != NULL){
-
-      set_t* n_set = dfs(root->children[i], sdep + root->children[i]->sdep);
-      set->count = join(set, n_set);      
-
+  list_t* l;
+  for(l = root->list; l->next != NULL; l=l->next){
+    if(l->next->pointer != NULL){
+      set_t* n_set = dfs(l->next->pointer, sdep + l->next->pointer->sdep);
+      set->count = join(set, n_set);
+      free(n_set->value);
+      free(n_set);
     }
   }
   TAB--;
@@ -318,23 +369,33 @@ set_t* dfs(node_t* root, int sdep){
 
 }
 
-void ukkonen(node_t* root, char* T2){
-  char* T = (char*) calloc(strlen(T2) + 2, 1);
-  if(DEBUG) printf("Adding %s\n", T2);
-  strcpy(T, T2);
-  T[strlen(T2)] = TERM + Tid;
-  T[strlen(T2)+1] = 0;
-  if(DEBUG) printf("Adding %s\n", T);
-  
-  int size = strlen(T)-1;
-  int j = strlen(Ti);
-  point_t *p = malloc(sizeof(point_t));
-  point(p, root, root, 0);
+void copy(int *dest, char* src){
+  int i;
+  for(i=0; src[i] != 0; i++)
+    dest[i] = src[i];
+  dest[i] = 0;
+}
 
-  strcat(Ti, T);
+void ukkonen(node_t* root, char* T2){
+  int* T = (int*) malloc((strlen(T2) + 2) * sizeof(int));
   
+  copy(T, T2);
+  int len = strlen(T2);
+  T[len] = TERM + Tid;
+  T[len+1] = 0;
+  
+  int size = len+1;
+  int j = Ti_len;
+  point_t *p = malloc(sizeof(point_t));
+  p->a = root;
+  p->b = root;
+  p->depth = 0;
+
+  memcpy(&Ti[Ti_len], T, size * sizeof(int));
+  Ti_len += len+1;
+
   Tid++;
-  Tsize = strlen(Ti)-1;
+  Tsize = Ti_len-1;
   int tip = j + size;
 
   while(j <= tip){
@@ -342,15 +403,14 @@ void ukkonen(node_t* root, char* T2){
     while(!descendQ(p, Ti[j]) ){
       if(DEBUG) printf("Add leaf\n");
       add_leaf(p, j);
-      if(DEBUG) print_tree(root);
       suffix_jump(p, j);
     }
     updateLink = 0;
     descend(p, Ti[j]);
-    if(DEBUG) print_tree(root);
     j++;
   }
 
+  free(p);
   free(T);
 }
 
@@ -362,38 +422,49 @@ void init_tree(){
   root->slink->sdep = 0;
   root->sdep = 1;
   int i;
-  for(i=0; i<SIZE; i++)
-    root->slink->children[i] = root;
+  for(i=0; i<SIZE; i++){
+    set(root->slink, i, root);
+    /*root->slink->children[i] = root;*/
+  }
 
-  Ti = (char*) calloc(MAX_LEN * MAX_STRINGS, 1);
+  Ti = (int*) malloc(TOTAL_SIZE * sizeof(int));
   Ti[0] = 0;
 }
 
-char Ts[MAX_STRINGS][MAX_LEN];
+char** Ts;
 
 int main(){
-  
-  init_tree();
-
-  int n, p;
+  int n, len;
   scanf("%d", &n);
-  if(DEBUG) printf("n: %d\n", n);
+
+  Ts = (char**) malloc(sizeof(char*) * (n+2) );
+  SET_SIZE = (n+32) / 32 + 1;
+  best = (int*) malloc(sizeof(int) * (n+5) );
+  memset(best, 0, sizeof(int) * (n+5) );
+
   int i;
   for(i=0; i<n; i++){
-    scanf("%d %s", &p, Ts[i]);
+    scanf("%d", &len);
+    TOTAL_SIZE += len+2;
+    Ts[i] = malloc(len+2);
+    scanf("%s", Ts[i]);
+  }
+
+  init_tree();
+
+  for(i=0; i<n; i++){
     ukkonen(root, Ts[i]);
   }
-  if(DEBUG) printf("\n");
-
-  memset(best, 0, sizeof(best));
-  set_t* set = dfs(root, 0);
-  if(DEBUG) printf("count %d\n", set->count);
-  /*print_tree(root);*/
+  
+  dfs(root, 0);
   for(i=2; i<=Tid; i++)
     printf("%d ", best[i]);
   printf("\n");
-
-  if(DEBUG) printf("%s\n", Ti);
-
+  
+  for(i=0; i<n; i++){
+    free(Ts[i]);
+  }
+  
+  
   return 0;
 }
